@@ -1,0 +1,32 @@
+{
+  "systemProperties": [
+    [
+      "org.apache.cxf.osgi.http.transport.disable",
+      "true"
+    ],
+    [
+      "com.sap.it.karaf.bootstrap.fail.on.unwired",
+      "true"
+    ],
+    [
+      "javax.ws.rs.ext.RuntimeDelegate",
+      "org.apache.cxf.jaxrs.impl.RuntimeDelegateImpl"
+    ]
+  ],
+  "defaultLogLevels": [
+    [
+      "io.elankath",
+      "INFO"
+    ] 
+  ],
+  "deployUnits": [
+    {
+      "bundles": [
+        {
+          "url": "ping.jar",
+          "start": true
+        }
+      ]
+    }
+  ]
+}
