@@ -13,7 +13,7 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Properties;
 
-@WebServlet("/")
+//@WebServlet("/")
 public class PingServlet extends HttpServlet {
 
     @Override

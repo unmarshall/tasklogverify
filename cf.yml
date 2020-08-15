@@ -1,12 +1,12 @@
 ---
 applications:
-  - name: ping
+  - name: tasklogverify
     memory: 2G
     instances: 1
-    path: target/ping.war
+    path: target/tasklogverify.war
     stack: cflinuxfs3
     env:
       TARGET_RUNTIME: tomcat
-      IT_SYSTEM_ID: it-dev
+      IT_SYSTEM_ID: it-adev001
     buildpacks:
       - sap_java_buildpack

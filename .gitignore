@@ -42,3 +42,5 @@ gen
 .xmake
 **/coverage
 /it-co-jinx.yml
+**/.factorypath
+vim.exe.stackdump
