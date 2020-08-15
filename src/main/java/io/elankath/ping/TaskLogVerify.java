@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.util.Date;
 import java.util.concurrent.ScheduledExecutorService;
@@ -48,13 +49,12 @@ public class TaskLogVerify extends HttpServlet {
             } else {
                 this.logWriter = new PrintWriter(Files.newBufferedWriter(log, UTF_8));
                 executor.submit(() -> cleanupExpiredLogFiles(logWriter));
-                out.println("Scheduled cleanup of expired task log files under " + tenantDir);
+                out.println("-- Scheduled cleanup of expired task log files under " + tenantDir);
             }
         } catch (Throwable t) {
             t.printStackTrace(out);
         } finally {
             out.flush();
-            closeQuietly();
         }
     }
 
@@ -78,42 +78,43 @@ public class TaskLogVerify extends HttpServlet {
         }
     }
 
-    public void closeQuietly() {
+    public void closeLogWriter() {
         if (logWriter != null) {
             try {
                 logWriter.close();
                 logWriter = null;
             } catch (Exception e) {
-                //
+                System.out.println("Error closing logWriter: " + logWriter);
             }
         }
     }
 
     void cleanupExpiredLogFiles(final PrintWriter out) {
-        out.println("Walking parent dir " + tenantDir + " ............." + " at " + now());
-        out.flush();
         try {
             walkAndCleanup(tenantDir, out);
-            out.println("Walking cleanup done at " + now());
         } catch (Throwable t) {
             t.printStackTrace(out);
+        } finally {
+            out.flush();
+            closeLogWriter();
         }
     }
 
     void walkAndCleanup(final Path dir, final PrintWriter out) throws IOException {
-        out.println("Entered walkAndCleanup at " + now());
+        out.println("(walkAndCleanup) Commencing walking dir: " + tenantDir + " ............." + " at " + now());
         out.flush();
         try (final Stream<Path> files = Files.walk(dir)) {
-            out.println("Got stream: " + files + " at " + now());
-            files.peek(f -> out.println("(walkAndCleanup) Analyzing file: " + f + " at " + now()))
-                    .filter(Files::isRegularFile)
-                    .peek(f -> out.println("(walkAndCleanup) Analyzing file: " + f + " at " + now()))
+            out.println("(walkAndCleanup) Got stream: " + files + " at " + now());
+            files.peek(f -> out.println("(walkAndCleanup) Analyzing candidate file: " + f + " at " + now()))
+                    .filter(f -> !Files.isDirectory(f))
+                    .peek(f -> out.println("(walkAndCleanup) Checking non-directory file: " + f + " at " + now()))
                     .peek(f -> out.flush())
-                    .filter(this::hasExpired)
+                    .filter(f -> hasExpired(f, out))
                     .peek(f -> out.println("(walkAndCleanup) Deleting file: " + f + " at " + now()))
                     .peek(f -> out.flush())
                     .forEach(f -> TaskLogVerify.deleteQuietly(f, out));
         }
+        out.println("(walkAndCleanup) Finished at " + now());
     }
 
     public static void deleteQuietly(final Path file, final PrintWriter out) {
@@ -131,11 +132,15 @@ public class TaskLogVerify extends HttpServlet {
         return currentTimeMillis() - time > expiry.toMillis();
     }
 
-    boolean hasExpired(final Path p) {
+    boolean hasExpired(final Path p, final PrintWriter out) {
         try {
             final BasicFileAttributes attributes = Files.readAttributes(p, BasicFileAttributes.class);
-            final long lastModifiedTime = attributes.lastModifiedTime().toMillis();
-            return isOlder(lastModifiedTime, Duration.ofDays(2));
+            final FileTime lastModifiedTime = attributes.lastModifiedTime();
+//            final long lastModifiedTime = lastModifiedTime.toMillis();
+            final Duration expiry = Duration.ofDays(1);
+            boolean hasExpired = isOlder(lastModifiedTime.toMillis(), Duration.ofDays(1));
+            out.printf("(hasExpired) lastModifiedTime: %s, expiry: %s, hasExpired: %s\n", lastModifiedTime, expiry, hasExpired);
+            return hasExpired;
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
