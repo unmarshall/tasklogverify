@@ -8,6 +8,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -15,6 +16,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.util.Date;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Stream;
 
@@ -103,26 +105,36 @@ public class TaskLogVerify extends HttpServlet {
     void walkAndCleanup(final Path dir, final PrintWriter out) throws IOException {
         out.println("(walkAndCleanup) Commencing walking dir: " + tenantDir + " ............." + " at " + now());
         out.flush();
-        try (final Stream<Path> files = Files.walk(dir)) {
-            out.println("(walkAndCleanup) Got stream: " + files + " at " + now());
-            files.peek(f -> out.println("(walkAndCleanup) Analyzing candidate file: " + f + " at " + now()))
-                    .filter(f -> !Files.isDirectory(f))
-                    .peek(f -> out.println("(walkAndCleanup) Checking non-directory file: " + f + " at " + now()))
-                    .peek(f -> out.flush())
-                    .filter(f -> hasExpired(f, out))
-                    .peek(f -> out.println("(walkAndCleanup) Deleting file: " + f + " at " + now()))
-                    .peek(f -> out.flush())
-                    .forEach(f -> TaskLogVerify.deleteQuietly(f, out));
+        try (final Stream<Path> paths = Files.walk(dir)) {
+            out.println("(walkAndCleanup) Got stream: " + paths + " at " + now());
+            paths.peek(p -> out.println("(walkAndCleanup) Analyzing candidate path: " + p + " at " + now()))
+                    .peek(p -> out.flush())
+                    .filter(p -> hasExpired(p, out))
+                    .peek(p -> out.println("(walkAndCleanup) Deleting file: " + p + " at " + now()))
+                    .peek(p -> out.flush())
+                    .forEach(p -> deletePath(p, out));
         }
         out.println("(walkAndCleanup) Finished at " + now());
     }
 
-    public static void deleteQuietly(final Path file, final PrintWriter out) {
+    public void deletePath(final Path p, final PrintWriter out) {
         try {
-            Files.delete(file);
-            out.println("Deleted file: " + file + " at " + now());
+            if (Objects.equals(p, tenantDir)) {
+                out.println("(deletePath) Will not delete: " + tenantDir);
+            }
+            if (Files.isDirectory(p)) {
+                try (final DirectoryStream<Path> children = Files.newDirectoryStream(p)) {
+                    if (children.iterator().hasNext()) {
+                        out.println("(deletePath) Cannot delete: " + p + " since it has children");
+                        return;
+                    }
+                }
+            }
+            Files.delete(p);
+            out.println("Deleted: " + p + " at " + now());
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            out.println("(deletePath) Error deleting " + p);
+            e.printStackTrace(out);
         } finally {
             out.flush();
         }
@@ -139,7 +151,7 @@ public class TaskLogVerify extends HttpServlet {
 //            final long lastModifiedTime = lastModifiedTime.toMillis();
             final Duration expiry = Duration.ofDays(1);
             boolean hasExpired = isOlder(lastModifiedTime.toMillis(), Duration.ofDays(1));
-            out.printf("(hasExpired) lastModifiedTime: %s, expiry: %s, hasExpired: %s\n", lastModifiedTime, expiry, hasExpired);
+            out.printf("(hasExpired) %s, lastModifiedTime: %s, expiry: %s, hasExpired: %s\n", p, lastModifiedTime, expiry, hasExpired);
             return hasExpired;
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
